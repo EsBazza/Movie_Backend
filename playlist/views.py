@@ -1,7 +1,12 @@
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, generics
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.views import APIView
+from rest_framework.authtoken.models import Token
 from django.shortcuts import get_object_or_404
+from django.contrib.auth.models import User
+from django.contrib.auth import authenticate
 
 from .models import Movie, Playlist, PlaylistItem
 from .serializers import (
@@ -11,7 +16,121 @@ from .serializers import (
     PlaylistItemSerializer,
     AddMovieToPlaylistSerializer,
     UpdatePlaylistItemStatusSerializer,
+    UserRegistrationSerializer,
 )
+from .services import search_tmdb, get_or_create_movie_from_tmdb, TMDBError
+
+
+class RegisterView(APIView):
+    """
+    User registration endpoint.
+    POST /api/register/ - Register a new user and return token
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = UserRegistrationSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.save()
+            # Create token for the new user
+            token, _ = Token.objects.get_or_create(user=user)
+            return Response({
+                'access': token.key,
+                'user_id': user.id,
+                'username': user.username,
+                'message': 'Registration successful'
+            }, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class LoginView(APIView):
+    """
+    User login endpoint.
+    POST /api/token/ - Login and get token
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        username = request.data.get('username')
+        password = request.data.get('password')
+
+        if not username or not password:
+            return Response(
+                {'error': 'Username and password are required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user = authenticate(username=username, password=password)
+        
+        if user:
+            token, _ = Token.objects.get_or_create(user=user)
+            return Response({
+                'access': token.key,
+                'user_id': user.id,
+                'username': user.username,
+            })
+        else:
+            return Response(
+                {'error': 'Invalid credentials'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+
+class TMDBSearchView(APIView):
+    """
+    Proxy endpoint for TMDB search.
+    GET /api/tmdb/search/?query=<movie_name>&page=1
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        query = request.query_params.get('query', '')
+        page = request.query_params.get('page', 1)
+        
+        if not query:
+            return Response(
+                {'error': 'Query parameter is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            page = int(page)
+        except ValueError:
+            page = 1
+        
+        try:
+            results = search_tmdb(query, page)
+            return Response(results)
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class TMDBMovieDetailView(APIView):
+    """
+    Proxy endpoint for TMDB movie details.
+    GET /api/tmdb/movies/<tmdb_id>/
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request, tmdb_id):
+        from .services import get_tmdb_movie_details
+        
+        try:
+            details = get_tmdb_movie_details(tmdb_id)
+            return Response(details)
+        except TMDBError as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class MovieViewSet(viewsets.ModelViewSet):
@@ -23,9 +142,52 @@ class MovieViewSet(viewsets.ModelViewSet):
     GET /api/movies/{id}/ - Get movie detail
     PUT /api/movies/{id}/ - Update movie
     DELETE /api/movies/{id}/ - Delete movie
+    POST /api/movies/get_or_create/ - Get or create movie from TMDB
     """
     queryset = Movie.objects.all()
     serializer_class = MovieSerializer
+    permission_classes = [AllowAny]
+
+    @action(detail=False, methods=["post"])
+    def get_or_create(self, request):
+        """
+        Get or create a movie from TMDB ID.
+        If movie exists locally, return it.
+        If not, fetch from TMDB, create locally, and return.
+        """
+        tmdb_id = request.data.get('tmdb_id')
+        
+        if not tmdb_id:
+            return Response(
+                {'error': 'tmdb_id is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            tmdb_id = int(tmdb_id)
+        except ValueError:
+            return Response(
+                {'error': 'tmdb_id must be an integer'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            movie, created = get_or_create_movie_from_tmdb(tmdb_id)
+            serializer = MovieSerializer(movie)
+            return Response(
+                serializer.data,
+                status=status.HTTP_201_CREATED if created else status.HTTP_200_OK
+            )
+        except TMDBError as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class PlaylistViewSet(viewsets.ModelViewSet):

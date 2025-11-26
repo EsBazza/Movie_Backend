@@ -26,7 +26,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'FoDuozbhwXFlf7x-t0_3FB8zeNnrJOUUQuKWk
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True').lower() in ('true', '1', 'yes')
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1,192.168.20.240').split(',')
 
 
 # Application definition
@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'rest_framework.authtoken',  # Token authentication
     'corsheaders',
     'playlist',
 ]
@@ -61,8 +62,11 @@ CORS_ALLOW_CREDENTIALS = True
 
 # Django REST Framework Configuration
 REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+    ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.AllowAny',  # No auth for simplicity (school project)
+        'rest_framework.permissions.AllowAny',  # Allow all for now
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,

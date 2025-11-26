@@ -3,6 +3,9 @@ Django>=5.2,<6
 djangorestframework>=3.15
 django-cors-headers>=4.3
 
+# JWT Authentication
+djangorestframework-simplejwt>=5.3
+
 # Database
 psycopg2-binary>=2.9
 dj-database-url>=2.1
@@ -11,5 +14,5 @@ dj-database-url>=2.1
 gunicorn>=21.0
 whitenoise>=6.6
 
-# Development
+# HTTP Client for TMDB
 requests>=2.31
