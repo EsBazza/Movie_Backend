@@ -9,6 +9,7 @@ from .views import (
     TMDBTVDetailView,
     TMDBTVSeasonDetailView,
     TMDBPopularView,
+    TMDBTopRatedView,
 )
 
 # Create a router and register our viewsets
@@ -30,4 +31,5 @@ urlpatterns = [
         name="tmdb-tv-season-detail",
     ),
     path("tmdb/popular/", TMDBPopularView.as_view(), name="tmdb-popular"),
+    path("tmdb/top-rated/", TMDBTopRatedView.as_view(), name="tmdb-top-rated"),
 ]

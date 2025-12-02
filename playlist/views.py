@@ -25,6 +25,8 @@ from .services import (
     get_tmdb_tv_details,
     get_tmdb_tv_season_details,
     get_tmdb_popular,
+    get_tmdb_top_rated,
+    get_tmdb_top_rated_anime,
 )
 
 
@@ -192,6 +194,32 @@ class TMDBPopularView(APIView):
             )
 
 
+class TMDBTopRatedView(APIView):
+    """Proxy endpoint for TMDB top rated movie, tv, or anime feeds."""
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        media_type = request.query_params.get("type", "movie")
+        page = request.query_params.get("page", 1)
+
+        try:
+            page = int(page)
+        except (ValueError, TypeError):
+            page = 1
+
+        try:
+            if media_type == "anime":
+                results = get_tmdb_top_rated_anime(page)
+            else:
+                results = get_tmdb_top_rated(media_type, page)
+            return Response(results)
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
 class MovieViewSet(viewsets.ModelViewSet):
     """
     API endpoint for Movie CRUD operations.
@@ -326,6 +354,7 @@ class PlaylistViewSet(viewsets.ModelViewSet):
 
 
 class PlaylistItemViewSet(viewsets.ModelViewSet):
+
     """
     API endpoint for PlaylistItem CRUD operations.
     Useful for directly managing items without going through playlist.
